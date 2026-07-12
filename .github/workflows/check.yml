@@ -2,8 +2,10 @@ name: Stock Price Check
 
 on:
   schedule:
+    # 한국 장중(09:00~15:30 KST) = UTC 00:00~06:30, 평일(월~금)
+    # cron은 UTC 기준
     - cron: "*/15 0-6 * * 1-5"
-  workflow_dispatch: {}
+  workflow_dispatch: {}  # 수동 실행 버튼도 사용 가능
 
 jobs:
   check:
@@ -24,5 +26,4 @@ jobs:
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          TO_EMAIL: ${{ secrets.TO_EMAIL }}
         run: python check_stock.py
