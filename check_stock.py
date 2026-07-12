@@ -2,10 +2,12 @@
 config.json에 등록된 국내 종목의 현재가를 조회하여
 기준가에 도달한 종목이 있으면 이메일로 알림을 보낸다.
 
-필요한 환경변수 (GitHub Secrets로 등록):
+필요한 환경변수 (GitHub Secrets로 등록, 최초 1회만):
   GMAIL_USER          - 발신용 Gmail 주소
   GMAIL_APP_PASSWORD  - Gmail 앱 비밀번호 (일반 로그인 비밀번호 아님)
-  TO_EMAIL            - 알림을 받을 이메일 주소 (본인 메일도 가능)
+
+알림 받을 이메일(TO_EMAIL)은 Secrets가 아니라 config.json의
+"notify_email" 값을 사용한다. UI(index.html)에서 자유롭게 변경 가능.
 """
 
 import json
@@ -23,7 +25,8 @@ NAVER_API = "https://m.stock.naver.com/api/stock/{code}/basic"
 
 def load_config():
     with open(CONFIG_PATH, encoding="utf-8") as f:
-        return json.load(f)["stocks"]
+        data = json.load(f)
+        return data["stocks"], data["notify_email"]
 
 
 def fetch_price(code: str) -> int:
@@ -43,10 +46,9 @@ def check_condition(price: int, target: int, condition: str) -> bool:
     raise ValueError(f"알 수 없는 condition: {condition}")
 
 
-def send_email(subject: str, body: str):
+def send_email(subject: str, body: str, to_email: str):
     gmail_user = os.environ["GMAIL_USER"]
     gmail_password = os.environ["GMAIL_APP_PASSWORD"]
-    to_email = os.environ["TO_EMAIL"]
 
     msg = MIMEText(body)
     msg["Subject"] = subject
@@ -59,7 +61,7 @@ def send_email(subject: str, body: str):
 
 
 def main():
-    stocks = load_config()
+    stocks, notify_email = load_config()
     triggered = []
     errors = []
 
@@ -103,7 +105,7 @@ def main():
     print(subject)
     print(body)
 
-    send_email(subject, body)
+    send_email(subject, body, notify_email)
 
 
 if __name__ == "__main__":
