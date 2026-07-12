@@ -1,17 +1,23 @@
 {
-  "notify_email": "본인이메일@gmail.com",
+  "notify_email": "hong24haha@gmail.com",
   "stocks": [
     {
       "code": "005930",
       "name": "삼성전자",
-      "condition": "above",
-      "target_price": 70000
+      "condition": "below",
+      "target_price": 270000
     },
     {
       "code": "000660",
       "name": "SK하이닉스",
       "condition": "below",
-      "target_price": 150000
+      "target_price": 1850000
+    },
+    {
+      "code": "005380",
+      "name": "현대자동차",
+      "condition": "below",
+      "target_price": 400000
     }
   ]
 }
