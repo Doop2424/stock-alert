@@ -21,12 +21,16 @@ import requests
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 NAVER_API = "https://m.stock.naver.com/api/stock/{code}/basic"
+NAVER_FX_API = (
+    "https://m.stock.naver.com/front-api/v1/marketIndex/prices"
+    "?page=1&pageSize=1&category=exchange&reutersCode={code}"
+)
 
 
 def load_config():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         data = json.load(f)
-        return data["stocks"], data["notify_email"]
+        return data.get("stocks", []), data.get("currencies", []), data["notify_email"]
 
 
 def fetch_price(code: str) -> int:
@@ -36,6 +40,15 @@ def fetch_price(code: str) -> int:
     data = resp.json()
     price_str = data["closePrice"]  # 예: "70,300"
     return int(price_str.replace(",", ""))
+
+
+def fetch_fx_rate(reuters_code: str) -> float:
+    """네이버 증권 모바일 API에서 환율을 조회한다. (예: FX_USDKRW)"""
+    resp = requests.get(NAVER_FX_API.format(code=reuters_code), timeout=10)
+    resp.raise_for_status()
+    data = resp.json()
+    price_str = data["result"][0]["closePrice"]  # 예: "1,384.50"
+    return float(price_str.replace(",", ""))
 
 
 def check_condition(price: int, target: int, condition: str) -> bool:
@@ -61,7 +74,7 @@ def send_email(subject: str, body: str, to_email: str):
 
 
 def main():
-    stocks, notify_email = load_config()
+    stocks, currencies, notify_email = load_config()
     triggered = []
     errors = []
 
@@ -80,26 +93,43 @@ def main():
         print(f"{name}({code}) 현재가 {price:,}원 / 기준가 {target:,}원 ({condition})")
 
         if check_condition(price, target, condition):
-            triggered.append((name, code, price, target, condition))
+            triggered.append((name, price, target, condition, "원"))
+
+    for cur in currencies:
+        code = cur["code"]  # 예: FX_USDKRW
+        name = cur.get("name", code)
+        target = cur["target_rate"]
+        condition = cur["condition"]
+
+        try:
+            rate = fetch_fx_rate(code)
+        except Exception as e:
+            errors.append(f"{name}({code}) 환율 조회 실패: {e}")
+            continue
+
+        print(f"{name} 현재 환율 {rate:,.2f}원 / 기준 {target:,.2f}원 ({condition})")
+
+        if check_condition(rate, target, condition):
+            triggered.append((name, rate, target, condition, "원"))
 
     if not triggered and not errors:
-        print("기준치 도달 종목 없음.")
+        print("기준치 도달 항목 없음.")
         return
 
     lines = []
-    for name, code, price, target, condition in triggered:
+    for name, value, target, condition, unit in triggered:
         word = "이상" if condition == "above" else "이하"
-        lines.append(f"- {name}({code}): 현재가 {price:,}원 (기준가 {target:,}원 {word} 도달)")
+        lines.append(f"- {name}: 현재 {value:,.2f}{unit} (기준 {target:,.2f}{unit} {word} 도달)")
     for err in errors:
         lines.append(f"- [오류] {err}")
 
     body = "\n".join(lines)
     subject_parts = []
     if triggered:
-        subject_parts.append(f"기준가 도달 {len(triggered)}건")
+        subject_parts.append(f"기준치 도달 {len(triggered)}건")
     if errors:
         subject_parts.append(f"조회오류 {len(errors)}건")
-    subject = "[주가 알림] " + ", ".join(subject_parts)
+    subject = "[주가/환율 알림] " + ", ".join(subject_parts)
 
     print("--- 이메일 발송 ---")
     print(subject)

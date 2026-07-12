@@ -223,6 +223,12 @@
   </div>
 
   <div class="card">
+    <h2>환율 목록</h2>
+    <div id="currencyList"></div>
+    <button class="add-btn" id="addCurrencyBtn">+ 환율 추가</button>
+  </div>
+
+  <div class="card">
     <h2>알림 받을 이메일</h2>
     <input type="email" id="emailInput" placeholder="you@gmail.com">
   </div>
@@ -235,6 +241,14 @@
 const STOCKS_URL = 'stocks.json';
 let stockDB = [];
 let currentSha = null;
+
+const CURRENCY_OPTIONS = [
+  { code: 'FX_USDKRW', name: '달러(USD)' },
+  { code: 'FX_JPYKRW', name: '엔화(JPY, 100엔 기준)' },
+  { code: 'FX_EURKRW', name: '유로(EUR)' },
+  { code: 'FX_CNYKRW', name: '위안(CNY)' },
+  { code: 'FX_GBPKRW', name: '파운드(GBP)' },
+];
 
 fetch(STOCKS_URL).then(r => r.json()).then(data => { stockDB = data; });
 
@@ -331,6 +345,42 @@ document.getElementById('addStockBtn').addEventListener('click', () => {
   document.getElementById('stockList').appendChild(makeStockRow());
 });
 
+function makeCurrencyRow(cur) {
+  cur = cur || { code: '', condition: 'below', target_rate: '' };
+  const row = document.createElement('div');
+  row.className = 'stock-row';
+  const optionsHtml = CURRENCY_OPTIONS.map(o =>
+    `<option value="${o.code}" ${cur.code === o.code ? 'selected' : ''}>${o.name}</option>`
+  ).join('');
+  row.innerHTML = `
+    <div>
+      <label>통화</label>
+      <select class="currency-select">
+        <option value="">선택</option>
+        ${optionsHtml}
+      </select>
+    </div>
+    <div>
+      <label>조건</label>
+      <select class="currency-condition">
+        <option value="above" ${cur.condition === 'above' ? 'selected' : ''}>이상</option>
+        <option value="below" ${cur.condition === 'below' ? 'selected' : ''}>이하</option>
+      </select>
+    </div>
+    <div>
+      <label>기준환율(원)</label>
+      <input type="number" step="0.01" class="currency-target" value="${cur.target_rate || ''}" placeholder="1350">
+    </div>
+    <button class="remove-btn" title="삭제">✕</button>
+  `;
+  row.querySelector('.remove-btn').addEventListener('click', () => row.remove());
+  return row;
+}
+
+document.getElementById('addCurrencyBtn').addEventListener('click', () => {
+  document.getElementById('currencyList').appendChild(makeCurrencyRow());
+});
+
 async function loadConfig() {
   const { repo, token } = getSettings();
   if (!repo || !token) { showStatus('저장소와 토큰을 입력해주세요.', 'err'); return; }
@@ -350,6 +400,10 @@ async function loadConfig() {
     list.innerHTML = '';
     (content.stocks || []).forEach(s => list.appendChild(makeStockRow(s)));
 
+    const curList = document.getElementById('currencyList');
+    curList.innerHTML = '';
+    (content.currencies || []).forEach(c => curList.appendChild(makeCurrencyRow(c)));
+
     showStatus('불러오기 완료.', 'ok');
     document.getElementById('settingsPanel').removeAttribute('open');
   } catch (e) {
@@ -361,7 +415,7 @@ async function saveConfig() {
   const { repo, token } = getSettings();
   if (!repo || !token) { showStatus('먼저 저장소 연결 설정에서 불러오기를 해주세요.', 'err'); return; }
 
-  const rows = [...document.querySelectorAll('.stock-row')];
+  const rows = [...document.querySelectorAll('#stockList .stock-row')];
   const stocks = [];
   for (const row of rows) {
     const name = row.querySelector('.stock-search').value.trim();
@@ -377,7 +431,19 @@ async function saveConfig() {
   const email = document.getElementById('emailInput').value.trim();
   if (!email) { showStatus('알림 받을 이메일을 입력해주세요.', 'err'); return; }
 
-  const newConfig = { notify_email: email, stocks };
+  const curRows = [...document.querySelectorAll('#currencyList .stock-row')];
+  const currencies = [];
+  for (const row of curRows) {
+    const code = row.querySelector('.currency-select').value;
+    const condition = row.querySelector('.currency-condition').value;
+    const target = row.querySelector('.currency-target').value;
+    if (!code) continue;
+    if (!target) { showStatus('환율 기준값을 입력해주세요.', 'err'); return; }
+    const name = CURRENCY_OPTIONS.find(o => o.code === code)?.name || code;
+    currencies.push({ code, name, condition, target_rate: Number(target) });
+  }
+
+  const newConfig = { notify_email: email, stocks, currencies };
   const contentStr = JSON.stringify(newConfig, null, 2);
   const contentB64 = btoa(unescape(encodeURIComponent(contentStr)));
 
