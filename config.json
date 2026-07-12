@@ -1,17 +1,17 @@
 {
-  "notify_email": "본인이메일@gmail.com",
+  "notify_email": "doopyo.hong@sjacc.co.kr",
   "stocks": [
     {
       "code": "005930",
       "name": "삼성전자",
-      "condition": "above",
-      "target_price": 70000
+      "condition": "below",
+      "target_price": 270000
     },
     {
       "code": "000660",
       "name": "SK하이닉스",
       "condition": "below",
-      "target_price": 150000
+      "target_price": 1850000
     }
   ],
   "currencies": [
@@ -19,7 +19,7 @@
       "code": "FX_USDKRW",
       "name": "달러(USD)",
       "condition": "below",
-      "target_rate": 1350
+      "target_rate": 1450
     }
   ]
 }
