@@ -1,0 +1,16 @@
+{
+  "stocks": [
+    {
+      "code": "005930",
+      "name": "삼성전자",
+      "condition": "above",
+      "target_price": 70000
+    },
+    {
+      "code": "000660",
+      "name": "SK하이닉스",
+      "condition": "below",
+      "target_price": 150000
+    }
+  ]
+}
