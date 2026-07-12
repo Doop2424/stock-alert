@@ -19,7 +19,7 @@
       "code": "FX_USDKRW",
       "name": "달러(USD)",
       "condition": "below",
-      "target_rate": 1450
+      "target_rate": 1430
     }
   ]
 }
