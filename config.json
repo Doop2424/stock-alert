@@ -4,19 +4,19 @@
     {
       "code": "005930",
       "name": "삼성전자",
-      "condition": "below",
+      "condition": "above",
       "target_price": 270000
     },
     {
       "code": "000660",
       "name": "SK하이닉스",
-      "condition": "below",
+      "condition": "above",
       "target_price": 1850000
     },
     {
       "code": "005380",
       "name": "현대자동차",
-      "condition": "below",
+      "condition": "above",
       "target_price": 400000
     }
   ]
