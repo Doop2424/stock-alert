@@ -21,9 +21,13 @@ import requests
 
 CONFIG_PATH = Path(__file__).parent / "config.json"
 NAVER_API = "https://m.stock.naver.com/api/stock/{code}/basic"
-NAVER_FX_API = (
+NAVER_FX_API_PRIMARY = (
     "https://m.stock.naver.com/front-api/v1/marketIndex/prices"
     "?page=1&pageSize=1&category=exchange&reutersCode={code}"
+)
+NAVER_FX_API_FALLBACK = (
+    "https://api.stock.naver.com/marketindex/exchange/{code}/prices"
+    "?page=1&pageSize=1"
 )
 
 
@@ -43,11 +47,24 @@ def fetch_price(code: str) -> int:
 
 
 def fetch_fx_rate(reuters_code: str) -> float:
-    """네이버 증권 모바일 API에서 환율을 조회한다. (예: FX_USDKRW)"""
-    resp = requests.get(NAVER_FX_API.format(code=reuters_code), timeout=10)
+    """네이버 증권 API에서 환율을 조회한다. (예: FX_USDKRW)
+    네이버가 비공식 API 경로를 종종 바꾸므로, 알려진 두 가지 방식을 순서대로 시도한다.
+    """
+    # 방식 1: front-api (category=exchange&reutersCode=...)
+    try:
+        resp = requests.get(NAVER_FX_API_PRIMARY.format(code=reuters_code), timeout=10)
+        if resp.ok:
+            data = resp.json()
+            price_str = data["result"][0]["closePrice"]
+            return float(price_str.replace(",", ""))
+    except Exception:
+        pass
+
+    # 방식 2: api.stock.naver.com (경로에 코드 직접 포함, 리스트 형태 응답)
+    resp = requests.get(NAVER_FX_API_FALLBACK.format(code=reuters_code), timeout=10)
     resp.raise_for_status()
     data = resp.json()
-    price_str = data["result"][0]["closePrice"]  # 예: "1,384.50"
+    price_str = data[0]["closePrice"]
     return float(price_str.replace(",", ""))
 
 
