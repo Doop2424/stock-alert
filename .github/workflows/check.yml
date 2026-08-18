@@ -3,9 +3,14 @@ name: Stock Price Check
 on:
   schedule:
     # 한국 장중(09:00~15:30 KST) = UTC 00:00~06:30, 평일(월~금)
-    # cron은 UTC 기준
-    - cron: "*/15 0-6 * * 1-5"
+    # cron은 UTC 기준 — 정시마다 1회
+    - cron: "0 0-6 * * 1-5"
+    # 장 마감(15:30 KST) 종가 반영
+    - cron: "30 6 * * 1-5"
   workflow_dispatch: {}  # 수동 실행 버튼도 사용 가능
+
+permissions:
+  contents: write        # latest.json 을 저장소에 커밋하려면 필요
 
 jobs:
   check:
@@ -27,3 +32,15 @@ jobs:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
         run: python check_stock.py
+
+      - name: Commit latest.json
+        run: |
+          if [ ! -f latest.json ]; then
+            echo "latest.json 이 생성되지 않았습니다 — check_stock.py 를 확인하세요."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add latest.json
+          git diff --staged --quiet || git commit -m "시세 갱신 [skip ci]"
+          git push
