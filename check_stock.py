@@ -1,6 +1,7 @@
 """
 config.json에 등록된 국내 종목의 현재가를 조회하여
 기준가에 도달한 종목이 있으면 이메일로 알림을 보낸다.
+조회 결과는 latest.json으로 저장하여 대시보드에서 읽어간다.
 
 필요한 환경변수 (GitHub Secrets로 등록, 최초 1회만):
   GMAIL_USER          - 발신용 Gmail 주소
@@ -14,12 +15,17 @@ import json
 import os
 import smtplib
 import sys
+from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from pathlib import Path
 
 import requests
 
-CONFIG_PATH = Path(__file__).parent / "config.json"
+BASE_DIR = Path(__file__).parent
+CONFIG_PATH = BASE_DIR / "config.json"
+LATEST_PATH = BASE_DIR / "latest.json"
+KST = timezone(timedelta(hours=9))
+
 NAVER_API = "https://m.stock.naver.com/api/stock/{code}/basic"
 NAVER_FX_API_PRIMARY = (
     "https://m.stock.naver.com/front-api/v1/marketIndex/prices"
@@ -30,6 +36,9 @@ NAVER_FX_API_FALLBACK = (
     "?page=1&pageSize=1"
 )
 
+# 조회에 성공한 값을 모아 latest.json으로 내보낸다.
+PRICES = {}
+
 
 def load_config():
     with open(CONFIG_PATH, encoding="utf-8") as f:
@@ -37,43 +46,74 @@ def load_config():
         return data.get("stocks", []), data.get("currencies", []), data["notify_email"]
 
 
-def fetch_price(code: str) -> int:
-    """네이버 증권 모바일 API에서 현재가(원)를 조회한다."""
+def _to_number(value):
+    """'70,300' / '-1.23' 같은 문자열을 숫자로. 실패하면 None."""
+    if value is None:
+        return None
+    try:
+        return float(str(value).replace(",", "").replace("%", "").strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _pick_change(data: dict):
+    """응답에서 전일 대비 등락률(%)을 찾는다. 키 이름이 바뀔 수 있어 후보를 순서대로 본다."""
+    for key in ("fluctuationsRatio", "changeRate", "fluctuationRatio", "compareRatio"):
+        rate = _to_number(data.get(key))
+        if rate is not None:
+            return rate
+    return None
+
+
+def fetch_price(code: str):
+    """네이버 증권 모바일 API에서 현재가(원)와 등락률(%)을 조회한다."""
     resp = requests.get(NAVER_API.format(code=code), timeout=10)
     resp.raise_for_status()
     data = resp.json()
-    price_str = data["closePrice"]  # 예: "70,300"
-    return int(price_str.replace(",", ""))
+    price = int(str(data["closePrice"]).replace(",", ""))
+    return price, _pick_change(data)
 
 
-def fetch_fx_rate(reuters_code: str) -> float:
-    """네이버 증권 API에서 환율을 조회한다. (예: FX_USDKRW)
+def fetch_fx_rate(reuters_code: str):
+    """네이버 증권 API에서 환율과 등락률을 조회한다. (예: FX_USDKRW)
     네이버가 비공식 API 경로를 종종 바꾸므로, 알려진 두 가지 방식을 순서대로 시도한다.
     """
     # 방식 1: front-api (category=exchange&reutersCode=...)
     try:
         resp = requests.get(NAVER_FX_API_PRIMARY.format(code=reuters_code), timeout=10)
         if resp.ok:
-            data = resp.json()
-            price_str = data["result"][0]["closePrice"]
-            return float(price_str.replace(",", ""))
+            row = resp.json()["result"][0]
+            return float(str(row["closePrice"]).replace(",", "")), _pick_change(row)
     except Exception:
         pass
 
     # 방식 2: api.stock.naver.com (경로에 코드 직접 포함, 리스트 형태 응답)
     resp = requests.get(NAVER_FX_API_FALLBACK.format(code=reuters_code), timeout=10)
     resp.raise_for_status()
-    data = resp.json()
-    price_str = data[0]["closePrice"]
-    return float(price_str.replace(",", ""))
+    row = resp.json()[0]
+    return float(str(row["closePrice"]).replace(",", "")), _pick_change(row)
 
 
-def check_condition(price: int, target: int, condition: str) -> bool:
+def check_condition(price, target, condition: str) -> bool:
     if condition == "above":
         return price >= target
     if condition == "below":
         return price <= target
     raise ValueError(f"알 수 없는 condition: {condition}")
+
+
+def write_latest():
+    """대시보드가 읽어갈 시세 파일을 만든다. 실패해도 알림 흐름은 막지 않는다."""
+    payload = {
+        "updated": datetime.now(KST).isoformat(timespec="seconds"),
+        "prices": PRICES,
+    }
+    try:
+        with open(LATEST_PATH, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=1)
+        print(f"latest.json 저장 ({len(PRICES)}건)")
+    except Exception as e:
+        print(f"latest.json 저장 실패: {e}", file=sys.stderr)
 
 
 def send_email(subject: str, body: str, to_email: str):
@@ -102,10 +142,15 @@ def main():
         condition = stock["condition"]
 
         try:
-            price = fetch_price(code)
+            price, change = fetch_price(code)
         except Exception as e:
             errors.append(f"{name}({code}) 조회 실패: {e}")
             continue
+
+        entry = {"name": name, "price": price}
+        if change is not None:
+            entry["change"] = change
+        PRICES[code] = entry
 
         print(f"{name}({code}) 현재가 {price:,}원 / 기준가 {target:,}원 ({condition})")
 
@@ -119,15 +164,23 @@ def main():
         condition = cur["condition"]
 
         try:
-            rate = fetch_fx_rate(code)
+            rate, change = fetch_fx_rate(code)
         except Exception as e:
             errors.append(f"{name}({code}) 환율 조회 실패: {e}")
             continue
+
+        entry = {"name": name, "price": rate}
+        if change is not None:
+            entry["change"] = change
+        PRICES[code] = entry
 
         print(f"{name} 현재 환율 {rate:,.2f}원 / 기준 {target:,.2f}원 ({condition})")
 
         if check_condition(rate, target, condition):
             triggered.append((name, rate, target, condition, "원"))
+
+    # 알림 여부와 무관하게 시세 파일은 항상 갱신한다.
+    write_latest()
 
     if not triggered and not errors:
         print("기준치 도달 항목 없음.")
