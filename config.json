@@ -5,13 +5,13 @@
       "code": "005930",
       "name": "삼성전자",
       "condition": "below",
-      "target_price": 200000
+      "target_price": 180000
     },
     {
       "code": "000660",
       "name": "SK하이닉스",
       "condition": "below",
-      "target_price": 1200000
+      "target_price": 1000000
     }
   ],
   "currencies": [
@@ -19,7 +19,7 @@
       "code": "FX_USDKRW",
       "name": "달러(USD)",
       "condition": "below",
-      "target_rate": 1300
+      "target_rate": 1200
     }
   ]
 }
