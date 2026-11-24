@@ -1,20 +1,20 @@
 {
- "updated": "2026-11-24T17:41:06+09:00",
+ "updated": "2026-11-25T03:06:01+09:00",
  "prices": {
   "005930": {
    "name": "삼성전자",
-   "price": 188300,
-   "change": 6.08
+   "price": 182900,
+   "change": 3.04
   },
   "000660": {
    "name": "SK하이닉스",
-   "price": 1142000,
-   "change": 5.25
+   "price": 1113000,
+   "change": 2.58
   },
   "FX_USDKRW": {
    "name": "달러(USD)",
-   "price": 1342.4,
-   "change": -0.01
+   "price": 1343.3,
+   "change": 0.06
   }
  }
 }
